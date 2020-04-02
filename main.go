@@ -95,6 +95,12 @@ func main() {
 	go getBody(crawlURL, nodeStream)
 	crawlableLinks := GetCrawableURLs(nodeStream)
 	for link := range crawlableLinks {
-		fmt.Println(link)
+		parse, err := url.Parse(link)
+		if err != nil {
+			continue
+		}
+		base, err := url.Parse(crawlURL)
+		nextURLToCrawl := base.ResolveReference(parse)
+		fmt.Println(nextURLToCrawl.String())
 	}
 }
