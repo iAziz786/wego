@@ -8,6 +8,7 @@ import (
 	"os"
 	"sync"
 
+	"github.com/iAziz786/wego/link"
 	"golang.org/x/net/html"
 )
 
@@ -38,26 +39,8 @@ func isValidURL(crawlURL string) bool {
 	return true
 }
 
-func getLink(n *html.Node, anchorLinks chan string) {
-	if n.Type == html.ElementNode && n.Data == "a" {
-		for _, a := range n.Attr {
-			if a.Key != "href" {
-				continue
-			}
-			link, err := url.Parse(a.Val)
-			if err != nil {
-				// ignore bad urls
-				continue
-			}
-			if link.String() != "" {
-				anchorLinks <- link.String()
-			}
-		}
-	}
-}
-
 func traverse(startingNode *html.Node, wg *sync.WaitGroup, anchorLinks chan string) {
-	getLink(startingNode, anchorLinks)
+	link.GetLink(startingNode, anchorLinks)
 	for n := startingNode.FirstChild; n != nil; n = n.NextSibling {
 		traverse(n, wg, anchorLinks)
 	}
@@ -94,13 +77,10 @@ func main() {
 	nodeStream := make(chan *html.Node)
 	go getBody(crawlURL, nodeStream)
 	crawlableLinks := GetCrawableURLs(nodeStream)
-	for link := range crawlableLinks {
-		parse, err := url.Parse(link)
-		if err != nil {
-			continue
+	for crawlableLink := range crawlableLinks {
+		if crawlableLink != "" {
+			joinedLink, _ := link.JoinURLs(crawlURL, crawlableLink)
+			fmt.Println(joinedLink)
 		}
-		base, err := url.Parse(crawlURL)
-		nextURLToCrawl := base.ResolveReference(parse)
-		fmt.Println(nextURLToCrawl.String())
 	}
 }
