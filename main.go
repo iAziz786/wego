@@ -7,8 +7,11 @@ import (
 	"net/url"
 	"os"
 	"sync"
+	"time"
 
+	"github.com/iAziz786/wego/extract"
 	"github.com/iAziz786/wego/link"
+	"github.com/iAziz786/wego/traverser"
 	"golang.org/x/net/html"
 )
 
@@ -39,22 +42,17 @@ func isValidURL(crawlURL string) bool {
 	return true
 }
 
-func traverse(startingNode *html.Node, wg *sync.WaitGroup, anchorLinks chan string) {
-	link.GetLink(startingNode, anchorLinks)
-	for n := startingNode.FirstChild; n != nil; n = n.NextSibling {
-		traverse(n, wg, anchorLinks)
-	}
-}
-
 // GetCrawableURLs will crawl all the elements of the node and find all the
 // all the anchor links and pass them down the channel
 func GetCrawableURLs(nodeStream <-chan *html.Node) chan string {
 	anchorLinks := make(chan string)
 	go func() {
-		var wg sync.WaitGroup
+		// var wg sync.WaitGroup
 		defer close(anchorLinks)
 		node := <-nodeStream
-		traverse(node, &wg, anchorLinks)
+		traverser.Traverse(node, func(node *html.Node) {
+			link.GetLink(node, anchorLinks)
+		})
 	}()
 	return anchorLinks
 }
@@ -77,10 +75,23 @@ func main() {
 	nodeStream := make(chan *html.Node)
 	go getBody(crawlURL, nodeStream)
 	crawlableLinks := GetCrawableURLs(nodeStream)
+	var wg sync.WaitGroup
 	for crawlableLink := range crawlableLinks {
 		if crawlableLink != "" {
+			wg.Add(1)
 			joinedLink, _ := link.JoinURLs(crawlURL, crawlableLink)
-			fmt.Println(joinedLink)
+			time.Sleep(100 * time.Millisecond)
+			go func() {
+				defer wg.Done()
+				resp, err := http.Get(joinedLink)
+				panicIfError(err)
+				defer resp.Body.Close()
+				node, err := html.Parse(resp.Body)
+				panicIfError(err)
+				text := extract.GetTextContent(node)
+				fmt.Println(text)
+			}()
 		}
 	}
+	wg.Wait()
 }
