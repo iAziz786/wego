@@ -3,11 +3,18 @@ package link
 import (
 	"net/url"
 
+	"github.com/iAziz786/wego/traverser"
 	"golang.org/x/net/html"
 )
 
-// GetLink parse the dom tree and send the link to anchorLink
-func GetLink(n *html.Node, anchorLinks chan string) {
+// FoundURL is the struct of the base URL of the value of href
+type FoundURL struct {
+	BaseURL      string
+	RelativeHref string
+}
+
+// GetLink parse the dom node and return the href if it's a link
+func GetLink(n *html.Node) string {
 	if n.Type == html.ElementNode && n.Data == "a" {
 		for _, a := range n.Attr {
 			if a.Key != "href" {
@@ -19,12 +26,11 @@ func GetLink(n *html.Node, anchorLinks chan string) {
 				continue
 			}
 			if link.String() != "" {
-				anchorLinks <- link.String()
+				return link.String()
 			}
 		}
-	} else {
-		anchorLinks <- ""
 	}
+	return ""
 }
 
 // JoinURLs with accept two URLs and append them so that it can be feedback
@@ -42,4 +48,34 @@ func JoinURLs(baseURL, hyperlink string) (string, error) {
 	}
 	nextURLToCrawl := base.ResolveReference(parse)
 	return nextURLToCrawl.String(), nil
+}
+
+// GetCrawableURLs will crawl all the elements of the node and find
+// all the anchor links and pass them down the channel
+func GetCrawableURLs(nodeStream <-chan *html.Node, locationHref string) chan *FoundURL {
+	anchorLinks := make(chan *FoundURL)
+	go func() {
+		defer close(anchorLinks)
+		node := <-nodeStream
+		var baseURL string
+		traverser.Traverse(node, func(node *html.Node) {
+			if node.Data == "base" {
+				for _, attr := range node.Attr {
+					if attr.Key != "href" {
+						continue
+					}
+					baseURL = attr.Val
+				}
+			}
+			href := GetLink(node)
+			if baseURL == "" {
+				baseURL = locationHref
+			}
+			anchorLinks <- &FoundURL{
+				BaseURL:      baseURL,
+				RelativeHref: href,
+			}
+		})
+	}()
+	return anchorLinks
 }
