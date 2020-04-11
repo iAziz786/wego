@@ -42,3 +42,27 @@ func TestGetTextContentScriptTag(t *testing.T) {
 		t.Errorf("expected %s got %s", "the script should not be includes", text)
 	}
 }
+
+func TestGetTextContentWithoutCSS(t *testing.T) {
+	reader := strings.NewReader(`
+<p>the script <strong>should not</strong> be includes</p><script>var go = "awesome";</script><style> p {color: red} </style><script src="https://dns.com" />`)
+	node, err := html.Parse(reader)
+	if err != nil {
+		t.Error(err)
+	}
+	text := GetTextContent(node)
+	if text != "the script should not be includes" {
+		t.Errorf("expected %s got %s", "the script should not be includes", text)
+	}
+
+	reader = strings.NewReader(`
+<style> p {color: red} </style>`)
+	node, err = html.Parse(reader)
+	if err != nil {
+		t.Error(err)
+	}
+	text = GetTextContent(node)
+	if text != "" {
+		t.Errorf("expected %s got %s", "", text)
+	}
+}
